@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 
 # --- CONFIGURATION ---
 # Set the path to your main Kanka export folder
-INPUT_DIRECTORY = 'SET/THE/PATH/TO/YOUR/kanka-export-here'
+INPUT_DIRECTORY = '/Users/jayfarschman/Downloads/the-little-shoppe'
 # Set the path where you want the text files to be saved
 OUTPUT_DIRECTORY = 'NotebookLM_Files/'
 # --- END CONFIGURATION ---
@@ -102,10 +102,18 @@ def create_id_map(input_dir):
                 file_path = os.path.join(root, filename)
                 with open(file_path, 'r', encoding='utf-8') as f:
                     try:
-                        # FIX: Kanka export is double-encoded. Load once to get the string,
-                        # then load the string to get the data dictionary.
-                        data_string = json.load(f)
-                        data = json.loads(data_string)
+                        # --- REWRITE START ---
+                        # First, attempt to load the file as a JSON object.
+                        loaded_json = json.load(f)
+
+                        # Check if the result is a string (double-encoded case).
+                        # If so, parse that string to get the actual data dictionary.
+                        if isinstance(loaded_json, str):
+                            data = json.loads(loaded_json)
+                        # Otherwise, it's already a dictionary (standard case).
+                        else:
+                            data = loaded_json
+                        # --- REWRITE END ---
                         
                         entity_id = data.get('id')
                         name = data.get('name')
@@ -127,19 +135,11 @@ def generate_text_files(input_dir, output_dir, id_map):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # A dictionary to hold the collected text for each entity type
-    # e.g., {'characters': ['content of char1', 'content of char2'], ...}
     output_buffers = {
         'characters': [], 'families': [], 'locations': [],
         'journals': [], 'notes': [], 'organisations': [], 'races': []
     }
     
-    type_name_map = {
-        'characters': 'Character', 'families': 'Family', 'locations': 'Location',
-        'journals': 'Journal', 'notes': 'Note', 'organisations': 'Organisation',
-        'races': 'Race'
-    }
-
     # First, process all files and store their content in memory
     for root, _, files in os.walk(input_dir):
         for filename in files:
@@ -153,8 +153,15 @@ def generate_text_files(input_dir, output_dir, id_map):
             file_path = os.path.join(root, filename)
             with open(file_path, 'r', encoding='utf-8') as f:
                 try:
-                    data_string = json.load(f)
-                    data = json.loads(data_string)
+                    # --- REWRITE START ---
+                    # Apply the same robust loading logic as in Pass 1.
+                    loaded_json = json.load(f)
+                    
+                    if isinstance(loaded_json, str):
+                        data = json.loads(loaded_json)
+                    else:
+                        data = loaded_json
+                    # --- REWRITE END ---
                     
                     # Get the formatted content for this single entity
                     content = format_entity(data, root, id_map)
@@ -178,7 +185,6 @@ def generate_text_files(input_dir, output_dir, id_map):
         output_filename = f"{entity_type}.txt"
         output_path = os.path.join(output_dir, output_filename)
         
-        # Join all individual entries with a clear separator
         separator = "\n\n\n" + ("=" * 80) + "\n\n\n"
         final_content = separator.join(content_list)
         
@@ -193,12 +199,9 @@ def format_entity(data, root, id_map):
     """
     folder_name = os.path.basename(root)
     name = data.get('name', 'Unnamed')
-    entity_id = data.get('id')
     
-    # Base header for all files
     header = f"========================================\n {folder_name.upper()[:-1]}: {name}\n========================================\n\n"
     
-    # Call the specific formatter
     if folder_name == 'characters':
         body = format_character(data, id_map)
     elif folder_name == 'families':
@@ -214,11 +217,11 @@ def format_entity(data, root, id_map):
     elif folder_name == 'races':
         body = format_race(data)
     else:
-        return None # Skip unknown types
+        return None
 
     return header + body
 
-# --- Specific Formatters for Each Entity Type ---
+# --- Specific Formatters for Each Entity Type (No changes needed below this line) ---
 
 def format_character(data, id_map):
     parts = ["[Basic Information]"]
@@ -312,7 +315,6 @@ def format_location(data):
 def format_note(data):
     parts = ["[Primary Content]\n"]
     entry_text = data.get('entity', {}).get('entry', '')
-    # For prophecies, blockquote the indented parts
     cleaned_entry = clean_html(entry_text)
     parts.append(cleaned_entry)
     return "\n".join(parts)
